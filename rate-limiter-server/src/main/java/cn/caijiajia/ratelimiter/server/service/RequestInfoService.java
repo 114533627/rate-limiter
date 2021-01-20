@@ -1,5 +1,6 @@
 package cn.caijiajia.ratelimiter.server.service;
 
+import cn.caijiajia.ratelimiter.core.common.util.DateUtils;
 import cn.caijiajia.ratelimiter.core.common.util.JsonUtils;
 import cn.caijiajia.ratelimiter.core.common.web.PageRequest;
 import cn.caijiajia.ratelimiter.core.common.web.PageResult;
@@ -8,6 +9,7 @@ import cn.caijiajia.ratelimiter.core.mybatis.service.CommonDaoService;
 import cn.caijiajia.ratelimiter.core.mybatis.support.IdGen;
 import cn.caijiajia.ratelimiter.example.RateLimiterInfoExample;
 import cn.caijiajia.ratelimiter.example.RequestInfoExample;
+import cn.caijiajia.ratelimiter.mapper.RequestInfoBaseMapper;
 import cn.caijiajia.ratelimiter.model.RateLimiterInfo;
 import cn.caijiajia.ratelimiter.model.RequestInfo;
 import cn.caijiajia.ratelimiter.model.SysConfig;
@@ -46,6 +48,8 @@ public class RequestInfoService {
     private SysConfigService sysConfigService;
     @Autowired(required = false)
     private RequestInfoMapper requestInfoMapper;
+    @Autowired(required = false)
+    private RequestInfoBaseMapper requestInfoBaseMapper;
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -236,6 +240,23 @@ public class RequestInfoService {
             log.info("requestInfoFromRedisToMysql redis -> mysql  end.....");
         } catch (Exception e) {
             log.error("requestInfoFromRedisToMysql redis -> mysql  error.....", e);
+        }
+    }
+
+    /**
+     * 清除两天前的日志
+     * @throws Exception
+     */
+    @Scheduled(cron = "0 1 0 * * *")
+    public void clearRequestInfoTableData() throws Exception {
+        try {
+            log.info("clearRequestInfoTableData  start.....");
+            RequestInfoExample requestInfoExample = new RequestInfoExample();
+            requestInfoExample.and().andCreateDateLessThan(DateUtils.addDays(new Date(),-2));
+            requestInfoBaseMapper.deleteByExample(requestInfoExample);
+            log.info("clearRequestInfoTableData   end.....");
+        } catch (Exception e) {
+            log.error("clearRequestInfoTableData  error.....", e);
         }
     }
 
