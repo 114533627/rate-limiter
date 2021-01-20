@@ -2,6 +2,7 @@ package cn.caijiajia.ratelimiter.core.common.interceptor;
 
 
 import cn.caijiajia.ratelimiter.core.common.constants.SysConstants;
+import cn.caijiajia.ratelimiter.core.common.exception.TokenInvalidException;
 import cn.caijiajia.ratelimiter.core.common.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -43,7 +44,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             if(authorization == null) throw new RuntimeException("未授权");
             String token = authorization.replaceAll("Bearer ", "");
             Object o1 = redisTemplate.opsForValue().get(SysConstants.user_token_redis_prefix + token);
-            if(o1 == null) throw new RuntimeException("token失效");
+            if(o1 == null) throw new TokenInvalidException("token失效");
             Long userId = (Long) o1;
             request.setAttribute(SysConstants.request_attr_user_id,userId);
         }

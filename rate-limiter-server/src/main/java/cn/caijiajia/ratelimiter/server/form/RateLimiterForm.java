@@ -25,6 +25,7 @@ import javax.validation.constraints.NotNull;
 @AllArgsConstructor
 @NoArgsConstructor
 public class RateLimiterForm {
+    private String id;
     @NotBlank
     private String name;
     @NotBlank

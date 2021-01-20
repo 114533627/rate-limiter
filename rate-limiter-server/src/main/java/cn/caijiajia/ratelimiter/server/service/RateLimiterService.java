@@ -93,7 +93,7 @@ public class RateLimiterService {
 
 
     public void saveOrUpdateRateLimiter(RateLimiterForm form) {
-        RateLimiterInfo rateLimiterInfo = getByContextAndName(form.getApps(), form.getName());
+        RateLimiterInfo rateLimiterInfo =commonDaoService.get(RateLimiterInfo.class,form.getId());
         String apps = form.getApps();
         if (rateLimiterInfo != null) {
             rateLimiterInfo.setApps(form.getApps());

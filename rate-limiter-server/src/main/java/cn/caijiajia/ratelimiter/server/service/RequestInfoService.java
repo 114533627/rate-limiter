@@ -52,9 +52,12 @@ public class RequestInfoService {
     public static String REDIS_REQQUEST_RECORD_KEY = "req:";
     public static String REDIS_REQQUEST_RECORD_ID_KEY = "req:ids:";
     public static String REDIS_BLACKLIST_KEY = "blacklist";
+    public static String REDIS_RECORD_HEADER_NAME_KEY = "record_header_names:";
 
     public void record(HttpServletRequest request, String context) {
-        SysConfig sysConfig = sysConfigService.getByCode(context, "record_header_names");
+
+        SysConfig sysConfig = getHeaderNamesConfig(context);
+
         List<String> recordHeaderNames = new ArrayList<>(); // 只有配置了的请求头才会被记录
         if (sysConfig != null) {
             if (sysConfig.getType() == 1) {
@@ -82,6 +85,18 @@ public class RequestInfoService {
         String key = getKey(context);
         redisTemplate.opsForHash().put(key, id.toString(), requestInfo);
         redisTemplate.opsForList().rightPush(REDIS_REQQUEST_RECORD_ID_KEY + context, id.toString());
+    }
+
+    private SysConfig getHeaderNamesConfig(String context) {
+        Object o = redisTemplate.opsForValue().get(REDIS_RECORD_HEADER_NAME_KEY + context);
+        SysConfig sysConfig = null;
+        if (o == null) {
+            sysConfig = sysConfigService.getByCode(context, "record_header_names");
+            redisTemplate.opsForValue().set(REDIS_RECORD_HEADER_NAME_KEY + context, sysConfig, 60 * 60, TimeUnit.SECONDS);
+        } else {
+            sysConfig = (SysConfig) o;
+        }
+        return sysConfig;
     }
 
     private Long getId() {
@@ -177,7 +192,6 @@ public class RequestInfoService {
     }
 
     /**
-     *
      * @param request
      * @return boolean 返回true 表示限制访问，否则不限制
      */
@@ -224,6 +238,7 @@ public class RequestInfoService {
             log.error("requestInfoFromRedisToMysql redis -> mysql  error.....", e);
         }
     }
+
     public void blacklistIpToRedis() {
         SysConfig sysConfig = sysConfigService.getByCode(null, "ip_blacklist");
         String jsonValue = sysConfig.getJsonValue();

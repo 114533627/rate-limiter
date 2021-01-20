@@ -64,6 +64,6 @@ public class RateLimiterController {
 
         Map<String, Boolean> collect = Arrays.asList(split).stream().collect(Collectors.toMap(item -> item, name -> rateLimiterClient.acquire(context, name)));
 
-        return new SimpleResponseVo(collect);
+        return collect;
     }
 }

@@ -35,7 +35,7 @@ public class RateLimiterClient {
      */
     public boolean acquire(String context, String key) {
         Token token = acquireToken(context, key);
-        return token.isPass() || token.isAccessRedisFail();
+        return token.isPass() || token.isAccessRedisFail() || token.isNoConfig();
     }
 
 
