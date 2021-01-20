@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class RateLimiterVo {
+    private Long id;
     private String name;
     private String apps;
     private Integer maxPermits;

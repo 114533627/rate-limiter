@@ -28,7 +28,7 @@ public class RateLimiterForm {
     @NotBlank
     private String name;
     @NotBlank
-    private String context;
+    private String apps;
     @NotNull
     private Integer maxPermits;
     @NotNull

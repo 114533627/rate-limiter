@@ -1,9 +1,11 @@
 package cn.caijiajia.ratelimiter.server.service;
 
+import cn.caijiajia.ratelimiter.client.RateLimiterClient;
 import cn.caijiajia.ratelimiter.client.RateLimiterConstants;
-import cn.caijiajia.ratelimiter.server.domain.RateLimiterInfo;
+import cn.caijiajia.ratelimiter.core.mybatis.service.CommonDaoService;
+import cn.caijiajia.ratelimiter.example.RateLimiterInfoExample;
+import cn.caijiajia.ratelimiter.model.RateLimiterInfo;
 import cn.caijiajia.ratelimiter.server.form.RateLimiterForm;
-import cn.caijiajia.ratelimiter.server.mapper.RateLimiterInfoMapper;
 import cn.caijiajia.ratelimiter.server.vo.RateLimiterVo;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -16,13 +18,13 @@ import org.springframework.data.redis.connection.StringRedisConnection;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import redis.clients.util.JedisByteHashMap;
 
 import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -33,35 +35,35 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-public class RateLimiterService implements InitializingBean {
+public class RateLimiterService {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource(name = "rateLimiterLua")
-    private RedisScript<Integer> rateLimiterLua;
+    private RedisScript<Long> rateLimiterLua;
 
+    @Autowired(required = false)
+    private CommonDaoService commonDaoService;
     @Autowired
-    private RateLimiterInfoMapper rateLimiterInfoMapper;
+    private RateLimiterClient rateLimiterClient;
 
-
-    private ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
-
-
-    private String getKey(String key) {
-        return RateLimiterConstants.RATE_LIMITER_KEY_PREFIX + key;
+    private String getKey(String context, String key) {
+        return RateLimiterConstants.RATE_LIMITER_KEY_PREFIX + context + ":" + key;
     }
 
-    public List<RateLimiterVo> getRateLimiters(String context) {
-        List<RateLimiterInfo> rateLimiterInfoList = rateLimiterInfoMapper.selectAll()
-                .stream()
-                .filter((rateLimiterInfo) -> Sets.newHashSet(rateLimiterInfo.getApps().split(",")).contains(context))
-                .collect(Collectors.toList());
+    public List<RateLimiterVo> getRateLimiters(String apps, Long id) {
+        RateLimiterInfoExample rateLimiterInfoExample = new RateLimiterInfoExample();
+        RateLimiterInfoExample.Criteria c = rateLimiterInfoExample.and();
+        if(StringUtils.isNotBlank(apps))c.andAppsEqualTo(apps);
+        if(id!=null) c.andIdEqualTo(id);
+        List<RateLimiterInfo> rateLimiterInfoList = commonDaoService.selectByExample(rateLimiterInfoExample);
 
         List<Object> rateLimiterListFromRedis = stringRedisTemplate.executePipelined((RedisCallback<Object>) connection -> {
             StringRedisConnection stringRedisConn = (StringRedisConnection) connection;
             for (RateLimiterInfo rateLimiterInfo : rateLimiterInfoList) {
-                stringRedisConn.hGetAll(getKey(rateLimiterInfo.getName()));
+                rateLimiterClient.acquire(rateLimiterInfo.getApps(), rateLimiterInfo.getName()); // 获取一个令牌，以触发令牌桶当前令牌数的刷新
+                stringRedisConn.hGetAll(getKey(rateLimiterInfo.getApps(), rateLimiterInfo.getName()));
             }
             return null;
         });
@@ -77,6 +79,7 @@ public class RateLimiterService implements InitializingBean {
             RateLimiterInfo rateLimiterInfo = rateLimiterInfoList.get(i);
             HashMap<String, String> rateLimiterMap = (HashMap<String, String>) object;
             rateLimiterRespList.add(RateLimiterVo.builder()
+                    .id(rateLimiterInfo.getId())
                     .name(rateLimiterInfo.getName())
                     .apps(rateLimiterMap.get("apps"))
                     .maxPermits(Integer.parseInt(rateLimiterMap.get("max_permits")))
@@ -90,61 +93,61 @@ public class RateLimiterService implements InitializingBean {
 
 
     public void saveOrUpdateRateLimiter(RateLimiterForm form) {
-        RateLimiterInfo rateLimiterInfo = rateLimiterInfoMapper.selectByName(form.getName());
-        String apps = form.getContext();
+        RateLimiterInfo rateLimiterInfo = getByContextAndName(form.getApps(), form.getName());
+        String apps = form.getApps();
         if (rateLimiterInfo != null) {
-            Set<String> contexts = Sets.newHashSet(rateLimiterInfo.getApps().split(","));
-            if (!contexts.contains(form.getContext())) {
-                contexts.add(form.getContext());
-            }
-            apps = StringUtils.join(contexts, ",");
+            rateLimiterInfo.setApps(form.getApps());
+            rateLimiterInfo.setMaxPermits(form.getMaxPermits());
+            rateLimiterInfo.setName(form.getName());
+            rateLimiterInfo.setRate(form.getRate());
+            commonDaoService.update(rateLimiterInfo);
+        } else {
+            rateLimiterInfo = new RateLimiterInfo();
+            rateLimiterInfo.setApps(form.getApps());
+            rateLimiterInfo.setMaxPermits(form.getMaxPermits());
+            rateLimiterInfo.setName(form.getName());
+            rateLimiterInfo.setRate(form.getRate());
+            commonDaoService.insert(rateLimiterInfo);
         }
 
-        rateLimiterInfoMapper.saveOrUpdate(form.getName(), apps, form.getMaxPermits(), form.getRate());
         stringRedisTemplate.execute(rateLimiterLua,
-                ImmutableList.of(getKey(form.getName())),
+                ImmutableList.of(getKey(form.getApps(), form.getName())),
                 RateLimiterConstants.RATE_LIMITER_INIT_METHOD, form.getMaxPermits() + "", form.getRate() + "", apps);
+    }
+
+    private RateLimiterInfo getByContextAndName(String context, String name) {
+        RateLimiterInfoExample rateLimiterInfoExample = new RateLimiterInfoExample();
+        rateLimiterInfoExample.and().andNameEqualTo(name).andAppsEqualTo(context).andValid();
+        return commonDaoService.selectOneByExample(rateLimiterInfoExample);
     }
 
 
     public void deleteRateLimiter(String context, String name) {
-        RateLimiterInfo rateLimiterInfo = rateLimiterInfoMapper.selectByName(name);
+        RateLimiterInfo rateLimiterInfo = getByContextAndName(context, name);
         if (rateLimiterInfo != null) {
-            Set<String> contexts = Sets.newHashSet(rateLimiterInfo.getApps().split(","));
-            if (contexts.contains(context)) {
-                contexts.remove(context);
-            }
-            if (contexts.isEmpty()) {
-                rateLimiterInfoMapper.deleteByName(name);
-
-            } else {
-                rateLimiterInfoMapper.saveOrUpdate(name, StringUtils.join(contexts, ","), rateLimiterInfo.getMaxPermits(), rateLimiterInfo.getRate());
-            }
+            commonDaoService.deletePhysically(rateLimiterInfo);
             stringRedisTemplate.execute(rateLimiterLua,
-                    ImmutableList.of(getKey(name)),
-                    RateLimiterConstants.RATE_LIMITER_INIT_METHOD, rateLimiterInfo.getMaxPermits().toString(), rateLimiterInfo.getRate().toString(), StringUtils.join(contexts, ","));
+                    ImmutableList.of(getKey(context, name)),
+                    RateLimiterConstants.RATE_LIMITER_DELETE_METHOD, rateLimiterInfo.getMaxPermits().toString(), rateLimiterInfo.getRate().toString(),context);
         }
     }
 
 
-    @Override
+
+    @Scheduled(fixedDelay = 1000*3*60, initialDelay = 1000*10)
     public void afterPropertiesSet() throws Exception {
-        executorService.scheduleAtFixedRate(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    log.info("diff db and redis job start.....");
-                    List<RateLimiterInfo> rateLimiterInfoList = rateLimiterInfoMapper.selectAll();
-                    for (RateLimiterInfo rateLimiterInfo : rateLimiterInfoList) {
-                        stringRedisTemplate.execute(rateLimiterLua,
-                                ImmutableList.of(getKey(rateLimiterInfo.getName())),
-                                RateLimiterConstants.RATE_LIMITER_INIT_METHOD, rateLimiterInfo.getMaxPermits().toString(), rateLimiterInfo.getRate().toString(), rateLimiterInfo.getApps());
-                    }
-                    log.info("diff db and redis job end.....");
-                } catch (Exception e) {
-                    log.error("diff db and redis error.....", e);
-                }
+        try {
+            log.info("diff db and redis job start.....");
+            RateLimiterInfoExample rateLimiterInfoExample = new RateLimiterInfoExample();
+            List<RateLimiterInfo> rateLimiterInfoList = commonDaoService.selectByExample(rateLimiterInfoExample);
+            for (RateLimiterInfo rateLimiterInfo : rateLimiterInfoList) {
+                stringRedisTemplate.execute(rateLimiterLua,
+                        ImmutableList.of(getKey(rateLimiterInfo.getApps(), rateLimiterInfo.getName())),
+                        RateLimiterConstants.RATE_LIMITER_INIT_METHOD, rateLimiterInfo.getMaxPermits().toString(), rateLimiterInfo.getRate().toString(), rateLimiterInfo.getApps());
             }
-        }, 0, 1, TimeUnit.MINUTES);
+            log.info("diff db and redis job end.....");
+        } catch (Exception e) {
+            log.error("diff db and redis error.....", e);
+        }
     }
 }

@@ -3,11 +3,15 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    <packaging>pom</packaging>
 
     <groupId>cn.caijiajia</groupId>
     <artifactId>rate-limiter</artifactId>
-    <packaging>pom</packaging>
-    <version>1.0.0.SNAPSHOT</version>
+    <version>${reversion}</version>
+
+    <properties>
+        <reversion>1.0.0.SNAPSHOT</reversion>
+    </properties>
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -18,6 +22,8 @@
         <module>rate-limiter-server</module>
         <module>rate-limiter-autoConfigure</module>
         <module>rate-limiter-starter</module>
+        <module>common-mybatis-model</module>
+        <module>common-core</module>
     </modules>
 
     <dependencyManagement>
@@ -77,12 +83,22 @@
             <dependency>
                 <groupId>cn.caijiajia</groupId>
                 <artifactId>rate-limiter-client</artifactId>
-                <version>1.0.0.SNAPSHOT</version>
+                <version>${reversion}</version>
             </dependency>
             <dependency>
                 <groupId>cn.caijiajia</groupId>
                 <artifactId>rate-limiter-autoConfigure</artifactId>
-                <version>1.0.0.SNAPSHOT</version>
+                <version>${reversion}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.caijiajia</groupId>
+                <artifactId>common-core</artifactId>
+                <version>${reversion}</version>
+            </dependency>
+            <dependency>
+                <groupId>cn.caijiajia</groupId>
+                <artifactId>common-mybatis-model</artifactId>
+                <version>${reversion}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -68,7 +68,7 @@ public class RateLimiterClient {
                     return connection.time();
                 }
             });
-            Long acquire = stringRedisTemplate.execute(rateLimiterClientLua, ImmutableList.of(getKey(key)), RateLimiterConstants.RATE_LIMITER_ACQUIRE_METHOD, permits.toString(), currMillSecond.toString(), context);
+            Long acquire = stringRedisTemplate.execute(rateLimiterClientLua, ImmutableList.of(getKey(context,key)), RateLimiterConstants.RATE_LIMITER_ACQUIRE_METHOD, permits.toString(), currMillSecond.toString(), context);
 
             if (acquire == 1) {
                 token = Token.PASS;
@@ -85,8 +85,8 @@ public class RateLimiterClient {
         return token;
     }
 
-    private String getKey(String key) {
-        return RateLimiterConstants.RATE_LIMITER_KEY_PREFIX + key;
+    private String getKey(String context, String key) {
+        return RateLimiterConstants.RATE_LIMITER_KEY_PREFIX + context + ":" + key;
     }
 
 

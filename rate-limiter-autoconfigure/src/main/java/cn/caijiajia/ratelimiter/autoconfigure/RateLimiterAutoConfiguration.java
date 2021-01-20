@@ -1,22 +1,23 @@
 package cn.caijiajia.ratelimiter.autoconfigure;
 
 import cn.caijiajia.ratelimiter.client.RateLimiterClient;
-import org.springframework.boot.autoconfigure.AutoConfigureBefore;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
  * @author wukaiqiang
  */
 @Configuration
-@AutoConfigureBefore(RedisAutoConfiguration.class)
-@ConditionalOnBean(StringRedisTemplate.class)
+@AutoConfigureAfter(RedisAutoConfiguration.class)
 public class RateLimiterAutoConfiguration {
 
     private StringRedisTemplate stringRedisTemplate;
@@ -25,9 +26,11 @@ public class RateLimiterAutoConfiguration {
         this.stringRedisTemplate = stringRedisTemplate;
     }
 
-    private DefaultRedisScript<Long> rateLimiterLua() {
+
+    @Bean
+    public DefaultRedisScript<Long> rateLimiterLua() {
         DefaultRedisScript<Long> defaultRedisScript = new DefaultRedisScript<Long>();
-        defaultRedisScript.setLocation(new ClassPathResource("classpath:rate_limiter.lua"));
+        defaultRedisScript.setLocation(new ClassPathResource("rate_limiter.lua"));
         defaultRedisScript.setResultType(Long.class);
         return defaultRedisScript;
     }
@@ -38,4 +41,13 @@ public class RateLimiterAutoConfiguration {
         return new RateLimiterClient(stringRedisTemplate, rateLimiterLua());
     }
 
+    @Bean
+    public RedisTemplate myRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        RedisTemplate<String, Object> stringObjectRedisTemplate = new RedisTemplate<>();
+        stringObjectRedisTemplate.setConnectionFactory(redisConnectionFactory);
+        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+        stringObjectRedisTemplate.setKeySerializer(stringRedisSerializer);
+        stringObjectRedisTemplate.setHashKeySerializer(stringRedisSerializer);
+        return stringObjectRedisTemplate;
+    }
 }
