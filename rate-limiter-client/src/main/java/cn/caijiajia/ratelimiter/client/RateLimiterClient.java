@@ -62,12 +62,13 @@ public class RateLimiterClient {
     public Token acquireToken(String context, String key, Integer permits) {
         Token token;
         try {
-            Long currMillSecond = stringRedisTemplate.execute(new RedisCallback<Long>() {
+            /*Long currMillSecond = stringRedisTemplate.execute(new RedisCallback<Long>() {
                 @Override
                 public Long doInRedis(RedisConnection connection) throws DataAccessException {
                     return connection.time();
                 }
-            });
+            });*/
+            Long currMillSecond = System.currentTimeMillis();
             Long acquire = stringRedisTemplate.execute(rateLimiterClientLua, ImmutableList.of(getKey(context,key)), RateLimiterConstants.RATE_LIMITER_ACQUIRE_METHOD, permits.toString(), currMillSecond.toString(), context);
 
             if (acquire == 1) {
